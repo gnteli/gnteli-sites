@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Projects — Elisabeth Guante</title>
+<title>Elisabeth Guante</title>
 
 <style>
 :root{
@@ -13,12 +13,6 @@
 
   /* overlay un po’ più leggero */
   --overlay: rgba(0,0,0,.65);
-
-  /* transizione palette ULTRA fluida */
-  transition:
-    --c1 120ms linear,
-    --c2 120ms linear,
-    --c3 120ms linear;
 }
 
 *{ box-sizing:border-box; }
@@ -28,7 +22,7 @@ body{
   background:#000;
   color:#fff;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
-  font-size:16px;
+  font-size:14px;
   font-weight:200;
   line-height:1.4;
   min-height:100vh;
@@ -41,6 +35,7 @@ body{
   z-index:-1;
   overflow:hidden;
   pointer-events:none;
+  background:#000;
 }
 
 .bg .overlay{
@@ -49,14 +44,12 @@ body{
   background:var(--overlay);
 }
 
-/* BLOB ~80% SCHERMO */
+/* BLOB GRANDI */
 .blob{
   position:absolute;
-  width:80vmax;
+  width:80vmax;   /* un po’ più grandi */
   height:80vmax;
   border-radius:50%;
-
-  /* colori più presenti */
   opacity:.88;
 
   background: radial-gradient(
@@ -67,10 +60,11 @@ body{
 
   filter: url(#blobNoise) blur(28px) saturate(1.2);
   will-change: transform;
+  transform: translate3d(0,0,0);
 }
 
 .b1{ color:var(--c1); animation: move1 14s linear infinite; }
-.b2{ color:var(--c2); opacity:.8;  animation: move2 18s linear infinite; }
+.b2{ color:var(--c2); opacity:.80; animation: move2 18s linear infinite; }
 .b3{ color:var(--c3); opacity:.78; animation: move3 16s linear infinite; }
 
 @keyframes move1{
@@ -127,17 +121,14 @@ a{
   text-decoration:none;
 }
 
-/* hover IMMEDIATO */
 a:hover{
-  text-decoration:underline;
-  text-underline-offset:3px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-/* PALETTE CHANGE — CSS PURO (istantaneo) */
-a[data-colors]:hover{
-  --c1: var(--hc1);
-  --c2: var(--hc2);
-  --c3: var(--hc3);
+/* transition colori: rende il cambio morbido */
+.bg .blob{
+  transition: color 140ms linear;
 }
 
 @media (max-width:560px){
@@ -156,7 +147,7 @@ a[data-colors]:hover{
   </filter>
 </svg>
 
-<div class="bg">
+<div class="bg" aria-hidden="true">
   <div class="blob b1"></div>
   <div class="blob b2"></div>
   <div class="blob b3"></div>
@@ -167,27 +158,59 @@ a[data-colors]:hover{
   <div class="left">
     <div>Projects</div>
     <div class="projects-list">
-      <a href="#"
-         style="--hc1:#22c55e;--hc2:#14b8a6;--hc3:#3b82f6">project 01</a>
-      <a href="#"
-         style="--hc1:#a855f7;--hc2:#ec4899;--hc3:#f97316">project 02</a>
-      <a href="#"
-         style="--hc1:#f43f5e;--hc2:#8b5cf6;--hc3:#06b6d4">project 03</a>
-      <a href="#"
-         style="--hc1:#eab308;--hc2:#22c55e;--hc3:#10b981">project 04</a>
+      <a href="#" data-colors="#22c55e,#14b8a6,#3b82f6">nome progetto</a>
+      <a href="#" data-colors="#a855f7,#ec4899,#f97316">nome progetto</a>
+      <a href="#" data-colors="#f43f5e,#8b5cf6,#06b6d4">nome progetto</a>
+      <a href="#" data-colors="#eab308,#22c55e,#10b981">nome progetto</a>
     </div>
   </div>
 
   <div class="right">
     <div>Elisabeth Guante</div>
     <div class="contacts">
-      <a href="#"
-         style="--hc1:#ef4444;--hc2:#f97316;--hc3:#eab308">gmail</a>
-      <a href="#"
-         style="--hc1:#06b6d4;--hc2:#3b82f6;--hc3:#a855f7">instagram</a>
+      <a href="#" data-colors="#ef4444,#f97316,#eab308">elisabethguante16@gmail.com</a>
+      <a href="https://www.instagram.com/gnteli/"
+   target="_blank"
+   rel="noopener"
+   data-colors="#06b6d4,#3b82f6,#a855f7">
+   instagram</a>
     </div>
   </div>
 </header>
+
+<script>
+  // Mouseover veloce e stabile: aggiorna le CSS variables su :root
+  const root = document.documentElement;
+
+  const defaults = {
+    c1: getComputedStyle(root).getPropertyValue("--c1").trim(),
+    c2: getComputedStyle(root).getPropertyValue("--c2").trim(),
+    c3: getComputedStyle(root).getPropertyValue("--c3").trim(),
+  };
+
+  function setPalette(c1, c2, c3){
+    root.style.setProperty("--c1", c1);
+    root.style.setProperty("--c2", c2);
+    root.style.setProperty("--c3", c3);
+  }
+
+  function parseColors(str){
+    const parts = (str || "").split(",").map(s => s.trim()).filter(Boolean);
+    return parts.length === 3 ? parts : null;
+  }
+
+  // Usa pointer events (più consistenti tra mouse/touchpad)
+  document.querySelectorAll("a[data-colors]").forEach(link => {
+    link.addEventListener("pointerenter", () => {
+      const cols = parseColors(link.dataset.colors);
+      if (cols) setPalette(cols[0], cols[1], cols[2]);
+    });
+
+    link.addEventListener("pointerleave", () => {
+      setPalette(defaults.c1, defaults.c2, defaults.c3);
+    });
+  });
+</script>
 
 </body>
 </html>
