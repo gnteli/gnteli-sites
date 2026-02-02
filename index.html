@@ -1,36 +1,193 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elisabeth Guante</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects — Elisabeth Guante</title>
 
+<style>
+:root{
+  --c1:#3b82f6;
+  --c2:#a855f7;
+  --c3:#22c55e;
 
-    <style> 
-    p {
-         color: blue;
-    }
-    
-    h1 {
-        font-family: Arial, Helvetica, sans-serif;
-        color: rgb(255, 225, 0);
-    }
-    </style>
-   
+  /* overlay un po’ più leggero */
+  --overlay: rgba(0,0,0,.65);
 
-     <h1>Elisabeth Guante</h1> 
-   
-     <p>i miei link:
-        <a target="_blank" href="https://www.instagram.com/gnteli/">IG</a><br>
+  /* transizione palette ULTRA fluida */
+  transition:
+    --c1 120ms linear,
+    --c2 120ms linear,
+    --c3 120ms linear;
+}
 
+*{ box-sizing:border-box; }
+
+body{
+  margin:0;
+  background:#000;
+  color:#fff;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  font-size:16px;
+  font-weight:200;
+  line-height:1.4;
+  min-height:100vh;
+}
+
+/* BACKGROUND */
+.bg{
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  overflow:hidden;
+  pointer-events:none;
+}
+
+.bg .overlay{
+  position:absolute;
+  inset:0;
+  background:var(--overlay);
+}
+
+/* BLOB ~80% SCHERMO */
+.blob{
+  position:absolute;
+  width:80vmax;
+  height:80vmax;
+  border-radius:50%;
+
+  /* colori più presenti */
+  opacity:.88;
+
+  background: radial-gradient(
+    circle at 35% 30%,
+    currentColor 0%,
+    transparent 56%
+  );
+
+  filter: url(#blobNoise) blur(28px) saturate(1.2);
+  will-change: transform;
+}
+
+.b1{ color:var(--c1); animation: move1 14s linear infinite; }
+.b2{ color:var(--c2); opacity:.8;  animation: move2 18s linear infinite; }
+.b3{ color:var(--c3); opacity:.78; animation: move3 16s linear infinite; }
+
+@keyframes move1{
+  0%   { transform: translate(-20%, -12%) scale(1); }
+  50%  { transform: translate( 25%,  20%) scale(1.05); }
+  100% { transform: translate(-20%, -12%) scale(1); }
+}
+@keyframes move2{
+  0%   { transform: translate( 30%, -15%) scale(1.08); }
+  50%  { transform: translate(-25%,  25%) scale(1); }
+  100% { transform: translate( 30%, -15%) scale(1.08); }
+}
+@keyframes move3{
+  0%   { transform: translate(-15%,  30%) scale(1.02); }
+  50%  { transform: translate( 20%, -25%) scale(1.1); }
+  100% { transform: translate(-15%,  30%) scale(1.02); }
+}
+
+/* LAYOUT */
+header{
+  display:flex;
+  justify-content:space-between;
+  padding:32px;
+}
+
+.left{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.projects-list{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.right{
+  text-align:right;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.contacts{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+/* LINK */
+a{
+  color:inherit;
+  text-decoration:none;
+}
+
+/* hover IMMEDIATO */
+a:hover{
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+
+/* PALETTE CHANGE — CSS PURO (istantaneo) */
+a[data-colors]:hover{
+  --c1: var(--hc1);
+  --c2: var(--hc2);
+  --c3: var(--hc3);
+}
+
+@media (max-width:560px){
+  header{ padding:22px 18px; }
+}
+</style>
 </head>
+
 <body>
 
-    Questa è la mia home page personale. 
-    Come state? bubu
-   
+<!-- FILTRO IRREGOLARE -->
+<svg width="0" height="0" style="position:absolute">
+  <filter id="blobNoise">
+    <feTurbulence type="fractalNoise" baseFrequency="0.013" numOctaves="2" seed="4"/>
+    <feDisplacementMap in="SourceGraphic" scale="18"/>
+  </filter>
+</svg>
+
+<div class="bg">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="overlay"></div>
+</div>
+
+<header>
+  <div class="left">
+    <div>Projects</div>
+    <div class="projects-list">
+      <a href="#"
+         style="--hc1:#22c55e;--hc2:#14b8a6;--hc3:#3b82f6">project 01</a>
+      <a href="#"
+         style="--hc1:#a855f7;--hc2:#ec4899;--hc3:#f97316">project 02</a>
+      <a href="#"
+         style="--hc1:#f43f5e;--hc2:#8b5cf6;--hc3:#06b6d4">project 03</a>
+      <a href="#"
+         style="--hc1:#eab308;--hc2:#22c55e;--hc3:#10b981">project 04</a>
+    </div>
+  </div>
+
+  <div class="right">
+    <div>Elisabeth Guante</div>
+    <div class="contacts">
+      <a href="#"
+         style="--hc1:#ef4444;--hc2:#f97316;--hc3:#eab308">gmail</a>
+      <a href="#"
+         style="--hc1:#06b6d4;--hc2:#3b82f6;--hc3:#a855f7">instagram</a>
+    </div>
+  </div>
+</header>
+
 </body>
-        <img src="https://i.pinimg.com/474x/0e/76/68/0e7668d48174ead620307c778e990227.jpg" alt="">
-        <img src="https://i.pinimg.com/474x/0e/76/68/0e7668d48174ead620307c778e990227.jpg" alt="">
-        <img src="https://i.pinimg.com/474x/0e/76/68/0e7668d48174ead620307c778e990227.jpg" alt="">
 </html>
