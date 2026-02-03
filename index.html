@@ -11,7 +11,6 @@
   --c2:#a855f7;
   --c3:#22c55e;
 
-  /* overlay un po’ più leggero */
   --overlay: rgba(0,0,0,.65);
 }
 
@@ -28,7 +27,6 @@ body{
   min-height:100vh;
 }
 
-/* BACKGROUND */
 .bg{
   position:fixed;
   inset:0;
@@ -44,7 +42,6 @@ body{
   background:var(--overlay);
 }
 
-/* BLOB GRANDI */
 .blob{
   position:absolute;
   width:80vmax;   /* un po’ più grandi */
@@ -83,7 +80,6 @@ body{
   100% { transform: translate(-15%,  30%) scale(1.02); }
 }
 
-/* LAYOUT */
 header{
   display:flex;
   justify-content:space-between;
@@ -115,7 +111,6 @@ header{
   gap:4px;
 }
 
-/* LINK */
 a{
   color:inherit;
   text-decoration:none;
@@ -126,7 +121,6 @@ a:hover{
   text-underline-offset: 3px;
 }
 
-/* transition colori: rende il cambio morbido */
 .bg .blob{
   transition: color 140ms linear;
 }
@@ -139,7 +133,6 @@ a:hover{
 
 <body>
 
-<!-- FILTRO IRREGOLARE -->
 <svg width="0" height="0" style="position:absolute">
   <filter id="blobNoise">
     <feTurbulence type="fractalNoise" baseFrequency="0.013" numOctaves="2" seed="4"/>
@@ -179,7 +172,6 @@ a:hover{
 </header>
 
 <script>
-  // Mouseover veloce e stabile: aggiorna le CSS variables su :root
   const root = document.documentElement;
 
   const defaults = {
@@ -199,7 +191,6 @@ a:hover{
     return parts.length === 3 ? parts : null;
   }
 
-  // Usa pointer events (più consistenti tra mouse/touchpad)
   document.querySelectorAll("a[data-colors]").forEach(link => {
     link.addEventListener("pointerenter", () => {
       const cols = parseColors(link.dataset.colors);
