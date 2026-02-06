@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Number ASCII – More Detail</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.5.0/lib/p5.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #000000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas { image-rendering: pixelated; }
+  </style>
+</head>
+
+<body>
+<script>
+let img;
+let imgGfx;
+
+const CW = 1100;
+const CH = 760;
+
+const FONT_SIZE   = 7;
+const LINE_HEIGHT = 8;
+let CHAR_W = 5;
+
+const SIGMOID_K    = 8.8;
+const BLACK_CUTOFF = 0.20;
+
+const WAVE_SPEED   = 2.2;
+const NOISE_SCALE  = 0.14;
+const JITTER_MAX   = 3;
+const SHIMMER_RATE = 0.18;
+
+const SAMPLES = 4;
+
+const BG = 0;
+const FG = 255;
+
+let COLS = 0, ROWS = 0;
+let areaX = 0, areaY = 0, areaW = 0, areaH = 0;
+
+let baseL;
+let baseDigit;
+
+const ZOOM_FACTOR = 3; 
+let zoomed = false;
+let zoomCX = CW / 2;    
+let zoomCY = CH / 2;
+
+function preload() {
+  img = loadImage("IMG_2758.png");
+}
+
+function setup() {
+  createCanvas(CW, CH);
+  pixelDensity(1);
+  background(BG);
+
+  textFont("monospace");
+  textSize(FONT_SIZE);
+  textAlign(LEFT, TOP);
+  noStroke();
+
+  CHAR_W = Math.max(1, Math.ceil(textWidth("0")));
+
+  COLS = Math.floor(width / CHAR_W);
+  ROWS = Math.floor(height / LINE_HEIGHT);
+
+  areaW = COLS * CHAR_W;
+  areaH = ROWS * LINE_HEIGHT;
+  areaX = Math.floor((width  - areaW) / 2);
+  areaY = Math.floor((height - areaH) / 2);
+
+  imgGfx = createGraphics(areaW, areaH);
+  imgGfx.pixelDensity(1);
+  imgGfx.background(255);
+
+  const r = containRect(img.width, img.height, areaW, areaH);
+  imgGfx.image(img, r.x, r.y, r.w, r.h);
+  imgGfx.loadPixels();
+
+  baseL = new Float32Array(COLS * ROWS);
+  baseDigit = new Uint8Array(COLS * ROWS);
+  computeBaseMaps();
+}
+
+function draw() {
+  background(BG);
+  fill(FG);
+
+ 
+  push();
+  if (zoomed) {
+    
+    translate(width / 2, height / 2);
+    scale(ZOOM_FACTOR);
+    translate(-zoomCX, -zoomCY);
+  }
+
+  const t = millis() * 0.001 * WAVE_SPEED;
+
+  for (let j = 0; j < ROWS; j++) {
+    let line = "";
+
+    for (let i = 0; i < COLS; i++) {
+      const k = j * COLS + i;
+      const L = baseL[k];
+
+      if (L < BLACK_CUTOFF) {
+        line += " ";
+        continue;
+      }
+
+      const d0 = baseDigit[k];
+
+      
+      const n1 = noise(i * NOISE_SCALE, j * NOISE_SCALE, t);
+      const n2 = noise((i + 777) * NOISE_SCALE, (j + 777) * NOISE_SCALE, t * 1.6);
+
+      let dv = Math.round(((n1 * 2 - 1) + (n2 * 2 - 1)) * 0.5 * JITTER_MAX);
+
+      const s = noise((i + 2000) * 0.11, (j + 2000) * 0.11, t * 2.4);
+      if (s > 1 - SHIMMER_RATE * 0.25) dv += 1;
+      if (s < SHIMMER_RATE * 0.18) dv -= 1;
+
+      const w = constrain((L - BLACK_CUTOFF) / (1 - BLACK_CUTOFF), 0, 1);
+      dv = Math.round(dv * (0.25 + 0.75 * w));
+
+      let d = d0 + dv;
+      d = constrain(d, 0, 9);
+
+      line += d.toString();
+    }
+
+    text(line, areaX, areaY + j * LINE_HEIGHT);
+  }
+
+  pop();
+}
+
+function mousePressed() {
+  if (!zoomed) {
+    
+    zoomCX = mouseX;
+    zoomCY = mouseY;
+    zoomed = true;
+  } else {
+    zoomed = false;
+  }
+}
+
+function computeBaseMaps() {
+  const offsets = [
+    [0.35, 0.35],
+    [0.65, 0.35],
+    [0.35, 0.65],
+    [0.65, 0.65],
+  ];
+
+  for (let j = 0; j < ROWS; j++) {
+    for (let i = 0; i < COLS; i++) {
+      const x0 = i * CHAR_W;
+      const y0 = j * LINE_HEIGHT;
+
+      let acc = 0;
+      for (let s = 0; s < (SAMPLES === 4 ? 4 : 1); s++) {
+        const ox = (SAMPLES === 4) ? offsets[s][0] : 0.5;
+        const oy = (SAMPLES === 4) ? offsets[s][1] : 0.5;
+
+        const sx = Math.floor(x0 + ox * CHAR_W);
+        const sy = Math.floor(y0 + oy * LINE_HEIGHT);
+
+        let r = 255, g = 255, b = 255;
+        if (sx >= 0 && sx < imgGfx.width && sy >= 0 && sy < imgGfx.height) {
+          const idx = 4 * (sy * imgGfx.width + sx);
+          r = imgGfx.pixels[idx];
+          g = imgGfx.pixels[idx + 1];
+          b = imgGfx.pixels[idx + 2];
+        }
+        const Ls = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        acc += Ls;
+      }
+      let L = acc / (SAMPLES === 4 ? 4 : 1);
+
+      L = 1 / (1 + Math.exp(-SIGMOID_K * (L - 0.5)));
+      L = constrain(L, 0, 1);
+
+      const k = j * COLS + i;
+      baseL[k] = L;
+      baseDigit[k] = Math.round(L * 9);
+    }
+  }
+}
+
+function containRect(iw, ih, bw, bh) {
+  const s = min(bw / iw, bh / ih);
+  const w = iw * s;
+  const h = ih * s;
+  return { x:(bw-w)/2, y:(bh-h)/2, w, h };
+}
+</script>
+</body>
+</html>
