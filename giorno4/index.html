@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inside my WhatsApp chat</title>
+
+  <style>
+    :root{ --bg:#fff; --fg:#111; --muted:#666; --border:#e6e6e6; }
+    html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--fg); }
+    body{
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      font-size:13px;
+      line-height:1.35;
+      overflow:hidden;
+    }
+
+    /* ===== HOME ===== */
+    .home{
+      height:100vh;
+      width:100%;
+      box-sizing:border-box;
+      padding:56px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    @media (max-width:520px){ .home{ padding:40px; } }
+
+    .topline{
+      flex:0 0 auto;
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      text-align:left;
+    }
+
+    .title{
+      flex:0 0 auto;
+      margin:0;
+      font-weight:900;
+      font-size:clamp(54px, 9vw, 128px);
+      letter-spacing:-0.04em;
+      line-height:0.92;
+      text-align:left;
+      cursor:default;
+      transition:transform .15s ease;
+      transform-origin:left top;
+    }
+    .title:hover{ transform:scale(1.02); }
+    .title .break{ display:block; }
+
+    .spacerAfterTitle{ height:44px; flex:0 0 auto; }
+
+    /* ===== CATEGORIE ===== */
+    .catsRow{ flex:0 0 auto; display:flex; align-items:flex-start; min-height:96px; }
+    .cats{
+      width:100%;
+      display:flex;
+      gap:110px;
+      overflow-x:auto;
+      overflow-y:hidden;
+      -webkit-overflow-scrolling:touch;
+      scroll-snap-type:x mandatory;
+      padding:10px 0 10px;
+      scrollbar-width:none;
+    }
+    .cats::-webkit-scrollbar{ display:none; }
+
+    .catBtn{
+      flex:0 0 auto;
+      scroll-snap-align:start;
+      appearance:none;
+      border:0;
+      background:transparent;
+      padding:0;
+      margin:0;
+      cursor:pointer;
+      color:var(--fg);
+      font:inherit;
+      text-align:left;
+    }
+    .catBtn .label{
+      display:inline-block;
+      font-weight:900;
+      font-size:clamp(54px, 5.5vw, 96px);
+      letter-spacing:-0.04em;
+      line-height:0.94;
+      border-bottom:1px solid transparent;
+      transition:opacity .15s ease, transform .15s ease, border-color .15s ease;
+      transform-origin:left top;
+      white-space:normal;
+      max-width:560px;
+    }
+    .catBtn:hover .label{
+      opacity:.96;
+      transform:scale(1.02);
+      border-bottom-color:rgba(0,0,0,.22);
+    }
+
+    .bottomline{
+      margin-top:auto;
+      flex:0 0 auto;
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      text-align:left;
+    }
+
+    /* ===== OVERLAY ===== */
+    .overlay{
+      position:fixed;
+      inset:0;
+      background:var(--bg);
+      display:none;
+      z-index:50;
+    }
+    .overlay.open{ display:block; }
+
+    .overlayInner{
+      height:100vh;
+      width:100%;
+      box-sizing:border-box;
+      padding:56px;
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
+    @media (max-width:520px){ .overlayInner{ padding:40px; } }
+
+    .backThin{
+      appearance:none;
+      border:0;
+      background:transparent;
+      padding:0;
+      width:36px;
+      height:36px;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      flex:0 0 auto;
+    }
+    .backThin svg{ width:24px; height:24px; display:block; }
+
+    .overlayBody{
+      flex:1 1 auto;
+      min-height:0;
+      overflow:auto;
+      display:flex;
+      align-items:flex-start;
+      justify-content:flex-start;
+    }
+    .viewWrap{ width:100%; }
+
+    /* KPI pills */
+    .kpi{ display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 18px; justify-content:flex-start; }
+    .pill{ display:inline-block; border:1px solid var(--border); border-radius:999px; padding:4px 10px; color:var(--muted); }
+
+    /* big svg */
+    svg{ width:100%; height:min(80vh, 820px); display:block; }
+    @media (max-width:820px){ svg{ height:min(72vh, 700px); } }
+    .bar:hover{ fill:#000 !important; }
+
+    table{ width:100%; border-collapse:collapse; margin-top:10px; }
+    th,td{ border-bottom:1px solid var(--border); padding:10px 10px; text-align:left; vertical-align:top; }
+    th{ font-size:12px; color:var(--muted); font-weight:700; }
+
+    .muted{ color:var(--muted); }
+  </style>
+</head>
+
+<body>
+  <!-- ===== HOME ===== -->
+  <div class="home" id="home">
+    <div class="topline" id="statusTop">Caricamento…</div>
+
+    <h1 class="title">
+      Inside my
+      <span class="break">whatsapp chat</span>
+    </h1>
+
+    <div class="spacerAfterTitle"></div>
+
+    <div class="catsRow">
+      <div class="cats" id="cats">
+        <button class="catBtn" data-open="totali">
+          <span class="label">Messaggi<br>inviati vs ricevuti</span>
+        </button>
+
+        <button class="catBtn" data-open="ore">
+          <span class="label">A che ora<br>scrivo di più?</span>
+        </button>
+
+        <button class="catBtn" data-open="giorni">
+          <span class="label">In che giorno<br>scrivo di più?</span>
+        </button>
+
+        <button class="catBtn" data-open="parole">
+          <span class="label">Che parole<br>uso di più?</span>
+        </button>
+
+        <button class="catBtn" data-open="emoji">
+          <span class="label">Che emoji<br>uso di più?</span>
+        </button>
+
+        <button class="catBtn" data-open="risate">
+          <span class="label">Quando<br>ho riso di più?</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="bottomline" id="range">Intervallo: —</div>
+  </div>
+
+  <!-- ===== OVERLAY ===== -->
+  <div class="overlay" id="overlay" aria-hidden="true">
+    <div class="overlayInner">
+      <button class="backThin" id="backThin" type="button" aria-label="Indietro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 18l-6-6 6-6"></path>
+        </svg>
+      </button>
+
+      <div class="overlayBody">
+        <div class="viewWrap">
+          <div id="view-totali" hidden>
+            <!-- ✅ KPI TAG IN ALTO (come avevi chiesto) -->
+            <div class="kpi" id="kpiTotals"></div>
+            <div id="donutWrap"></div>
+          </div>
+
+          <div id="view-ore" hidden>
+            <div id="hourSvg"></div>
+          </div>
+
+          <div id="view-giorni" hidden>
+            <div id="dowSvg"></div>
+          </div>
+
+          <div id="view-parole" hidden>
+            <div id="wordsTbl"></div>
+          </div>
+
+          <div id="view-emoji" hidden>
+            <div id="emojiTbl"></div>
+          </div>
+
+          <div id="view-risate" hidden>
+            <div id="laughSvg"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   CONFIG
+   ========================= */
+const CHAT_FILES = ["_chat.txt","_chat2.txt","_chat3.txt","_chat4.txt"].map(encodeURI);
+const ME_NORM = "elisabeth";
+
+/* =========================
+   ROUTER
+   ========================= */
+const OVERLAY = document.getElementById("overlay");
+const BACK_THIN = document.getElementById("backThin");
+const CAT_BTNS = Array.from(document.querySelectorAll(".catBtn"));
+
+const VIEWS = {
+  totali: document.getElementById("view-totali"),
+  ore: document.getElementById("view-ore"),
+  giorni: document.getElementById("view-giorni"),
+  parole: document.getElementById("view-parole"),
+  emoji: document.getElementById("view-emoji"),
+  risate: document.getElementById("view-risate"),
+};
+
+function hideAllViews(){ Object.values(VIEWS).forEach(v => v.hidden = true); }
+
+function openOverlay(key){
+  hideAllViews();
+  const v = VIEWS[key];
+  if(!v) return;
+  v.hidden = false;
+
+  OVERLAY.classList.add("open");
+  OVERLAY.setAttribute("aria-hidden","false");
+  if(ALL.length) requestAnimationFrame(renderAll);
+}
+
+function closeOverlay(){
+  OVERLAY.classList.remove("open");
+  OVERLAY.setAttribute("aria-hidden","true");
+  hideAllViews();
+}
+
+CAT_BTNS.forEach(btn => btn.addEventListener("click", ()=>openOverlay(btn.dataset.open)));
+BACK_THIN.addEventListener("click", closeOverlay);
+window.addEventListener("keydown", (e)=>{ if(e.key==="Escape" && OVERLAY.classList.contains("open")) closeOverlay(); });
+OVERLAY.addEventListener("click", (e)=>{ if(e.target===OVERLAY) closeOverlay(); });
+
+/* =========================
+   PARSER iOS WhatsApp
+   ========================= */
+const LINE_RE = /^\[(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s*(\d{1,2}):(\d{2}):(\d{2})[\s\u202F\u00A0]*(AM|PM)\]\s*([^:]+):\s*(.*)$/;
+
+function normalizeName(name){
+  return String(name || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+function parseWhatsapp(text, chatId){
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let cur = null;
+  function push(){ if(cur && cur.senderRaw) out.push(cur); cur=null; }
+
+  for(const raw0 of lines){
+    const raw = raw0.replace(/\u202F|\u00A0/g, " ");
+    const m = raw.match(LINE_RE);
+    if(m){
+      push();
+      let [, dd, mo, yy, hh, mm, ss, ap, sender, body] = m;
+      dd=+dd; mo=+mo; yy=+yy; if(yy<100) yy+=2000;
+      hh=+hh; mm=+mm; ss=+ss;
+      if(ap==="PM" && hh<12) hh+=12;
+      if(ap==="AM" && hh===12) hh=0;
+
+      const dt = new Date(yy, mo-1, dd, hh, mm, ss);
+      if(Number.isNaN(dt.getTime())) continue;
+
+      cur = { chat:chatId, dt, senderRaw:sender.trim(), senderNorm:normalizeName(sender), text:(body||"") };
+    } else if(cur){
+      cur.text += "\n" + raw0;
+    }
+  }
+  push();
+  out.sort((a,b)=>a.dt-b.dt);
+  return out;
+}
+
+/* =========================
+   HELPERS
+   ========================= */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c]));
+}
+function svgBarChartWithBottomLabels(values, labels){
+  const max = Math.max(...values, 1);
+  const w = values.length * 10;
+
+  const bars = values.map((v,i)=>{
+    const h = (v/max) * 70;
+    const y = 84 - h;
+    const shade = Math.round(220 - (v/max)*160);
+    return `<rect class="bar" x="${i*10}" y="${y}" width="8" height="${h}"
+      fill="rgb(${shade},${shade},${shade})"><title>${escapeHtml(labels[i])}: ${v}</title></rect>`;
+  }).join("");
+
+  const texts = labels.map((lab,i)=>{
+    const x = i*10 + 4;
+    return `<text x="${x}" y="98" text-anchor="middle" font-size="5" fill="#666">${escapeHtml(lab)}</text>`;
+  }).join("");
+
+  return `<svg viewBox="0 0 ${w} 105" role="img">${bars}${texts}</svg>`;
+}
+
+/* ✅ Donut: niente scritte fuori, KPI sopra + percentuali dentro */
+function svgDonut(sent, recv){
+  const total = Math.max(1, sent + recv);
+  const sentPct = (sent / total) * 100;
+  const recvPct = (recv / total) * 100;
+
+  const r = 42;
+  const c = 2 * Math.PI * r;
+  const sentLen = c * (sent / total);
+  const restLen = c - sentLen;
+
+  return `
+  <svg viewBox="0 0 420 260" role="img">
+    <g transform="translate(210,130)">
+      <circle r="${r}" fill="none" stroke="#eee" stroke-width="24"></circle>
+
+      <circle r="${r}" fill="none" stroke="#555" stroke-width="24"
+        stroke-linecap="round"
+        stroke-dasharray="0 ${c}"
+        transform="rotate(-90)">
+        <animate attributeName="stroke-dasharray"
+                 from="0 ${c}"
+                 to="${sentLen} ${restLen}"
+                 dur="0.8s"
+                 fill="freeze"></animate>
+        <title>Inviati: ${sent} (${sentPct.toFixed(1)}%) — Ricevuti: ${recv} (${recvPct.toFixed(1)}%)</title>
+      </circle>
+
+      <!-- percentuali dentro “fasce” (visivamente dentro donut) -->
+      <text x="0" y="-6" text-anchor="middle" font-size="14" fill="#111">${sentPct.toFixed(1)}%</text>
+      <text x="0" y="14" text-anchor="middle" font-size="12" fill="#666">${recvPct.toFixed(1)}%</text>
+    </g>
+  </svg>`;
+}
+
+function topTable(map, headers, n=40){
+  const entries=[...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n);
+  if(!entries.length) return `<div class="muted">Nessun dato.</div>`;
+  let html=`<table><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
+  for(const [k,v] of entries){
+    html += `<tr><td>${escapeHtml(String(k))}</td><td>${v}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  return html;
+}
+
+/* stopwords */
+const STOP = new Set([
+  "a","ad","al","allo","ai","agli","alla","alle","anche","ancora","che","chi","ci","come","con","cosa",
+  "da","dal","dalla","dalle","dei","del","dello","della","delle","di","dove","e","è","ed","gli","ha","hai","hanno","ho","i","il",
+  "in","io","la","le","lei","lo","lui","ma","mi","mia","mie","mio","ne","nei","nel","nello","nella","nelle","no","noi","non","o","ok",
+  "per","perché","più","poi","quale","quando","qui","quindi","se","sei","si","sì","solo","sono","sta","stai","stanno","sto","su","sul",
+  "sulla","sulle","te","ti","tra","tu","tua","tue","tuo","un","una","uno","va","vai","vi","voi","pm","marco","togni","omesso","audio","me","elisabeth","immagine","fa","omessa","incluso","sticker","chiarabella"
+]);
+function tokenize(text){
+  return String(text||"").toLowerCase()
+    .replace(/https?:\/\/\S+/g," ")
+    .replace(/[\d_]+/g," ")
+    .replace(/[“”"’'`´]/g," ")
+    .replace(/[^\p{L}\s]/gu," ")
+    .split(/\s+/)
+    .map(w=>w.trim())
+    .filter(w => w.length>=2 && !STOP.has(w));
+}
+
+/* Emoji */
+let EMOJI_RE = null;
+try { EMOJI_RE = new RegExp("\\p{Emoji}", "gu"); }
+catch { EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu; }
+const SKIN_MOD = new Set(["\u{1F3FB}","\u{1F3FC}","\u{1F3FD}","\u{1F3FE}","\u{1F3FF}"]);
+function getEmoji(text){
+  const m = String(text||"").match(EMOJI_RE) || [];
+  return m.filter(e =>
+    !SKIN_MOD.has(e) &&
+    e !== "\uFE0F" &&
+    e !== "\u20E3" &&
+    !/^[0-9#*]$/.test(e)
+  );
+}
+
+/* =========================
+   LOAD + COMPUTE
+   ========================= */
+let ALL = [];
+let NAME_EMOJI_BLACKLIST = new Set();
+
+async function loadAll(){
+  const top = document.getElementById("statusTop");
+  top.textContent = "Caricamento…";
+
+  const fetched = [];
+  const missing = [];
+
+  for(const fn of CHAT_FILES){
+    try{
+      const res = await fetch(fn);
+      if(!res.ok){ missing.push(`${decodeURI(fn)} (HTTP ${res.status})`); continue; }
+      fetched.push({ fn: decodeURI(fn), text: await res.text() });
+    }catch{
+      missing.push(`${decodeURI(fn)} (fetch failed)`);
+    }
+  }
+
+  if(!fetched.length){
+    throw new Error("Nessun file caricato. Controlla CHAT_FILES e che il server locale punti alla cartella giusta.");
+  }
+
+  const all = [];
+  for(const f of fetched){
+    const chatId = f.fn.replace(/\.txt$/i,"");
+    const parsed = parseWhatsapp(f.text, chatId);
+    for(const m of parsed) all.push(m);
+  }
+  all.sort((a,b)=>a.dt-b.dt);
+  ALL = all;
+
+  NAME_EMOJI_BLACKLIST = new Set();
+  for (const m of ALL) for (const e of getEmoji(m.senderRaw || "")) NAME_EMOJI_BLACKLIST.add(e);
+
+  top.textContent = `Messaggi totali: ${ALL.length}` + (missing.length ? ` — Mancanti: ${missing.join(", ")}` : "");
+  renderAll();
+}
+
+const DAY_IT = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
+function monthLabelItOnly(m){
+  const M = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+  return M[m] || "";
+}
+
+function compute(){
+  const mine = [];
+  const other = [];
+  for(const m of ALL){
+    if(m.senderNorm === ME_NORM) mine.push(m);
+    else other.push(m);
+  }
+
+  const hour = Array(24).fill(0);
+  const dow = Array(7).fill(0);
+  const words = new Map();
+  const emojis = new Map();
+
+  const start = new Date(2025, 0, 1, 0, 0, 0);
+  const end   = new Date(2026, 1, 1, 0, 0, 0);
+  const monthCounts = Array(13).fill(0);
+  const monthLabels = [];
+  for(let i=0;i<13;i++){
+    const d = new Date(2025, 0+i, 1);
+    monthLabels.push(monthLabelItOnly(d.getMonth()));
+  }
+
+  for(const m of mine){
+    hour[m.dt.getHours()]++;
+    dow[m.dt.getDay()]++;
+
+    const txt = m.text || "";
+    const low = txt.toLowerCase();
+
+    for(const w of tokenize(txt)) words.set(w, (words.get(w)||0) + 1);
+
+    for(const e of getEmoji(txt)){
+      if (NAME_EMOJI_BLACKLIST.has(e)) continue;
+      emojis.set(e, (emojis.get(e)||0) + 1);
+    }
+
+    if(m.dt >= start && m.dt < end){
+      const c = (low.match(/ahah/g) || []).length
+              + (low.match(/haha/g) || []).length
+              + (low.match(/hahahaha/g) || []).length
+              + (low.match(/lol/g)  || []).length;
+      if(c){
+        const idx = (m.dt.getFullYear() - 2025) * 12 + (m.dt.getMonth());
+        if(idx >= 0 && idx < 13) monthCounts[idx] += c;
+      }
+    }
+  }
+
+  return { mine, other, hour, dow, words, emojis, monthCounts, monthLabels };
+}
+
+function renderAll(){
+  if(!ALL.length) return;
+  const r = compute();
+
+  const first = ALL[0]?.dt ? ALL[0].dt.toLocaleString() : "—";
+  const last  = ALL[ALL.length-1]?.dt ? ALL[ALL.length-1].dt.toLocaleString() : "—";
+  document.getElementById("range").textContent = `Intervallo: ${first} → ${last}`;
+
+  /* ✅ KPI TAG in alto SOLO per la sezione totali */
+  document.getElementById("kpiTotals").innerHTML = `
+    <span class="pill"><b>Totale:</b> ${ALL.length}</span>
+    <span class="pill"><b>Inviati (tu):</b> ${r.mine.length}</span>
+    <span class="pill"><b>Ricevuti:</b> ${r.other.length}</span>
+  `;
+  document.getElementById("donutWrap").innerHTML = svgDonut(r.mine.length, r.other.length);
+
+  const hourLabels = Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
+  document.getElementById("hourSvg").innerHTML = svgBarChartWithBottomLabels(r.hour, hourLabels);
+
+  document.getElementById("dowSvg").innerHTML = svgBarChartWithBottomLabels(r.dow, DAY_IT);
+
+  document.getElementById("wordsTbl").innerHTML = topTable(r.words, ["Parola","Occorrenze"], 40);
+  document.getElementById("emojiTbl").innerHTML = topTable(r.emojis, ["Emoji","Occorrenze"], 40);
+
+  document.getElementById("laughSvg").innerHTML = svgBarChartWithBottomLabels(r.monthCounts, r.monthLabels);
+}
+
+window.addEventListener("resize", ()=>{ if(ALL.length) renderAll(); });
+
+/* Start */
+hideAllViews();
+loadAll().catch(err=>{
+  document.getElementById("statusTop").textContent = "Errore: " + err.message;
+});
+</script>
+</body>
+</html>

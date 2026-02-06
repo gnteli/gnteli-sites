@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>gnteli — PRECISE dots (SVG)</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+
+  <style>
+    html, body { margin:0; padding:0; background:#0b0b0b; }
+    svg { width:100vw; height:100vh; display:block; background:#0b0b0b; }
+    .hint{
+      position:fixed; left:16px; bottom:14px;
+      color:rgba(255,255,255,0.78);
+      font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      user-select:none;
+    }
+    .hint code { opacity:0.9; }
+  </style>
+</head>
+<body>
+  <svg id="scene" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="hint">
+    Mouse vicino = ESPLOSIONE · Click = pausa/play · <code>R</code> = rigenera (font random)
+  </div>
+
+<script>
+/* ===================== CONFIG ===================== */
+const WORD = "dots";
+
+const FONT_URLS = [
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/anton/Anton-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bebasneue/BebasNeue-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/montserrat/Montserrat-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/firasans/FiraSans-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sourcesans3/SourceSans3-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/worksans/WorkSans-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/archivo/Archivo-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/inter/Inter-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/robotoslab/RobotoSlab-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/playfairdisplay/PlayfairDisplay-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/cinzel/Cinzel-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dmserifdisplay/DMSerifDisplay-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/cormorantgaramond/CormorantGaramond-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/pacifico/Pacifico-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dancingscript/DancingScript-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/kaushanscript/KaushanScript-Regular.ttf"
+];
+
+const BG = "#0b0b0b";
+const FG = "#f0f0f0";
+
+// Pallini piccoli e densi
+const DOT_SPACING_PX = 9;
+const DOT_RADIUS = 1.65;
+
+// Velocità controllata
+const SPEED_MIN = 100;
+const SPEED_MAX = 140;
+
+const JITTER = 0.15;
+const TRACKING = 18;
+
+const OUTLINE_OPACITY = 0.10;
+const OUTLINE_STROKE = 2.0;
+
+/* ====== EXPLOSION PHYSICS ====== */
+// MODIFICA: Raggio ridotto da 160 a 110. Più preciso.
+const REPEL_RADIUS = 110;        
+const REPEL_STRENGTH = 28000;     
+const REPEL_FALLOFF = 3.5;       
+
+const IMPULSE_STRENGTH = 1800;   
+const IMPULSE_COOLDOWN_MS = 160; 
+
+// === FISICA "COLLA" ===
+const SPRING_K = 140; 
+const DAMPING = 16;
+const AIR_DRAG = 0.94;
+
+/* ===================== UTILS ===================== */
+const svgNS = "http://www.w3.org/2000/svg";
+const rand = (a,b)=> a + Math.random()*(b-a);
+
+function el(tag, attrs = {}) {
+  const n = document.createElementNS(svgNS, tag);
+  for (const [k,v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+  return n;
+}
+function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+async function loadFont(url){
+  const res = await fetch(url, { mode:"cors" });
+  if(!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  const buf = await res.arrayBuffer();
+  return opentype.parse(buf);
+}
+
+function pickFontsPerLetter(word, fonts){
+  if(fonts.length >= word.length){
+    const s = shuffle(fonts);
+    return word.split("").map((_,i)=>s[i]);
+  }
+  return word.split("").map(()=>fonts[Math.floor(Math.random()*fonts.length)]);
+}
+
+function measureWordWidth(word, assigned, size){
+  let w=0;
+  for(let i=0;i<word.length;i++){
+    w += assigned[i].getAdvanceWidth(word[i], size);
+    if(i<word.length-1) w += TRACKING;
+  }
+  return w;
+}
+
+function pathDataForLetter(font, ch, x, yBaseline, size){
+  return font.getPath(ch, x, yBaseline, size).toPathData(3);
+}
+
+/* ===================== STATE ===================== */
+let running = true;
+let rafId = null;
+let lastT = 0;
+
+let mouseX = 0, mouseY = 0;
+let mouseActive = false;
+
+let dots = [];
+
+/* ===================== MAIN ===================== */
+async function render() {
+  cancelAnimationFrame(rafId);
+  dots = [];
+  lastT = performance.now();
+
+  const svg = document.getElementById("scene");
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+
+  clear(svg);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.style.background = BG;
+
+  const loading = el("text", {
+    x: W/2, y: H/2,
+    "text-anchor": "middle",
+    "dominant-baseline": "middle",
+    fill: FG,
+    "font-size": 16,
+    "font-family":"system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif",
+    opacity: 0.9
+  });
+  loading.textContent = "Carico font…";
+  svg.appendChild(loading);
+
+  let fonts = [];
+  try {
+    const results = await Promise.allSettled(FONT_URLS.map(loadFont));
+    fonts = results.filter(r=>r.status==="fulfilled").map(r=>r.value);
+    if(fonts.length === 0) throw new Error("Nessun font caricato.");
+  } catch (e) {
+    loading.textContent = "Errore caricamento. Apri Console.";
+    console.error(e);
+    return;
+  }
+  svg.removeChild(loading);
+
+  const assigned = pickFontsPerLetter(WORD, fonts);
+
+  let fontSize = Math.min(H*0.45, 260);
+  for(let t=0;t<14;t++){
+    const ww = measureWordWidth(WORD, assigned, fontSize);
+    if(ww <= W*0.92) break;
+    fontSize *= 0.90;
+  }
+
+  const baselineY = H*0.62;
+  const totalW = measureWordWidth(WORD, assigned, fontSize);
+  let xCursor = (W - totalW)/2;
+
+  const outlineLayer = el("g", {});
+  const dotsLayer = el("g", {});
+  svg.appendChild(outlineLayer);
+  svg.appendChild(dotsLayer);
+
+  for(let i=0;i<WORD.length;i++){
+    const ch = WORD[i];
+    const f = assigned[i];
+    const d = pathDataForLetter(f, ch, xCursor, baselineY, fontSize);
+
+    const pathEl = el("path", {
+      d,
+      fill: "none",
+      stroke: FG,
+      "stroke-width": OUTLINE_STROKE,
+      "stroke-linecap":"round",
+      "stroke-linejoin":"round",
+      opacity: OUTLINE_OPACITY
+    });
+    outlineLayer.appendChild(pathEl);
+
+    const len = pathEl.getTotalLength();
+    const count = Math.max(12, Math.floor(len / DOT_SPACING_PX));
+
+    for(let k=0;k<count;k++){
+      const c = el("circle", { r: DOT_RADIUS, fill: FG, opacity: 0.95 });
+      dotsLayer.appendChild(c);
+
+      const phase = (k / count) * len + rand(0, DOT_SPACING_PX);
+      const s0 = ((phase % len) + len) % len;
+      const p0 = pathEl.getPointAtLength(s0);
+
+      dots.push({
+        circleEl: c,
+        pathEl,
+        pathLen: len,
+        phase,
+        speed: rand(SPEED_MIN, SPEED_MAX),
+        jitterSeed: rand(0, 9999),
+        x: p0.x,
+        y: p0.y,
+        vx: 0,
+        vy: 0,
+        lastImpulseMs: -999999
+      });
+    }
+
+    xCursor += f.getAdvanceWidth(ch, fontSize) + TRACKING;
+  }
+
+  tick(performance.now());
+}
+
+function tick(now){
+  rafId = requestAnimationFrame(tick);
+
+  const dt = Math.min(0.033, (now - lastT) / 1000);
+  lastT = now;
+  if(!running) return;
+
+  for(const d of dots){
+    d.phase += d.speed * dt;
+    const L = d.pathLen;
+    let s = d.phase % L;
+    if (s < 0) s += L;
+
+    const p = d.pathEl.getPointAtLength(s);
+    
+    const jx = Math.sin((now/220) + d.jitterSeed) * JITTER;
+    const jy = Math.cos((now/260) + d.jitterSeed) * JITTER;
+    const tx = p.x + jx;
+    const ty = p.y + jy;
+
+    // Fisica Molla
+    let ax = SPRING_K * (tx - d.x);
+    let ay = SPRING_K * (ty - d.y);
+
+    // Mouse Interaction
+    if(mouseActive){
+      const dx = d.x - mouseX;
+      const dy = d.y - mouseY;
+      const dist = Math.hypot(dx, dy);
+
+      if(dist > 0.0001 && dist < REPEL_RADIUS){
+        const t = 1 - (dist / REPEL_RADIUS);
+        const push = REPEL_STRENGTH * Math.pow(t, REPEL_FALLOFF);
+
+        ax += (dx / dist) * push;
+        ay += (dy / dist) * push;
+
+        if (now - d.lastImpulseMs > IMPULSE_COOLDOWN_MS) {
+          const impulse = IMPULSE_STRENGTH * (0.6 + 0.4 * t);
+          d.vx += (dx / dist) * impulse;
+          d.vy += (dy / dist) * impulse;
+          d.lastImpulseMs = now;
+        }
+      }
+    }
+
+    // Smorzamento
+    ax -= DAMPING * d.vx;
+    ay -= DAMPING * d.vy;
+
+    d.vx = (d.vx + ax * dt) * AIR_DRAG;
+    d.vy = (d.vy + ay * dt) * AIR_DRAG;
+
+    d.x  += d.vx * dt;
+    d.y  += d.vy * dt;
+
+    d.circleEl.setAttribute("cx", d.x.toFixed(2));
+    d.circleEl.setAttribute("cy", d.y.toFixed(2));
+  }
+}
+
+/* ===================== EVENTS ===================== */
+render();
+window.addEventListener("resize", () => render());
+window.addEventListener("click", () => { running = !running; });
+window.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "r") render(); });
+
+window.addEventListener("pointermove", (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  mouseActive = true;
+});
+window.addEventListener("pointerleave", () => { mouseActive = false; });
+window.addEventListener("blur", () => { mouseActive = false; });
+</script>
+</body>
+</html>
