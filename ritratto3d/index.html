@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Head 3D — Natural / Points / Thermal Brush / Inflate Brush</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    #app { width: 100%; height: 100%; }
+    .hud{
+      position: fixed; left: 12px; top: 12px; z-index: 10;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color: #fff; user-select: none;
+      display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    }
+    .btn{
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color:#fff; padding: 8px 10px; border-radius: 10px;
+      cursor:pointer; transition:120ms ease; font-size:14px;
+    }
+    .btn:hover{ background: rgba(255,255,255,0.14); }
+    .btn.active{ border-color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.16); }
+    .hint{ opacity:0.78; font-size:12px; margin-left:6px; line-height:1.35; }
+    .kbd{ padding:2px 6px; border:1px solid rgba(255,255,255,0.25); border-radius:6px; font-size:12px; opacity:.95; }
+    .overlay{
+      position: fixed; inset: 0; z-index: 20;
+      display:flex; align-items:center; justify-content:center;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color:#fff; background: rgba(0,0,0,0.72);
+      text-align:center; padding: 20px;
+    }
+    .overlay.hidden{ display:none; }
+    .overlay small{ opacity: 0.8; display:block; margin-top: 10px; line-height:1.4; }
+    code{ background: rgba(255,255,255,0.10); padding: 2px 6px; border-radius: 6px; }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "lil-gui": "https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.esm.min.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="overlay" class="overlay">
+    <div>
+      <div style="font-size:18px; font-weight:650;">Caricamento modello…</div>
+      <small>
+        Assicurati di aprire con Live Server e avere <code>head.obj</code> + <code>head.jpeg</code> nella stessa cartella di <code>index.html</code>.
+      </small>
+    </div>
+  </div>
+
+  <div class="hud">
+    <button id="btnNatural" class="btn active">1) Naturale</button>
+    <button id="btnPoints"  class="btn">2) Puntini</button>
+    <button id="btnThermal" class="btn">3) Termo (Pennello)</button>
+    <button id="btnInflate" class="btn">4) Gonfia (Pennello)</button>
+    <span class="hint">
+      <span class="kbd">1-4</span> modalità · <span class="kbd">Mouse</span> ruota/zoom<br/>
+      <span class="kbd">Spazio</span> esplode puntini · <span class="kbd">F</span> flip fronte · <span class="kbd">R</span> ruota 90°<br/>
+      Termo: <span class="kbd">click</span> scalda · <span class="kbd">Shift+click</span> raffredda<br/>
+      Gonfia: <span class="kbd">click</span> gonfia · <span class="kbd">Alt+click</span> sgonfia
+    </span>
+  </div>
+
+  <div id="app"></div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { MeshSurfaceSampler } from "three/addons/math/MeshSurfaceSampler.js";
+    import GUI from "lil-gui";
+
+    // -----------------------------
+    // Config (file names)
+    // -----------------------------
+    const OBJ_PATH = "./head.obj";
+    const TEX_PATH = "./head.jpeg"; // se è .jpg, cambia qui
+
+    const overlay = document.getElementById("overlay");
+    const hideOverlay = () => overlay.classList.add("hidden");
+    const showError = (msg) => {
+      overlay.classList.remove("hidden");
+      overlay.innerHTML = `
+        <div>
+          <div style="font-size:18px; font-weight:700; color:#ffb4b4;">Errore</div>
+          <div style="margin-top:8px;">${msg}</div>
+          <small>Apri la console (F12) per dettagli. Controlla nomi file e Live Server.</small>
+        </div>
+      `;
+    };
+
+    // -----------------------------
+    // Renderer / Scene / Camera
+    // -----------------------------
+    const container = document.getElementById("app");
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 3000);
+    camera.position.set(0, 0.25, 1.5);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 0.95);
+    key.position.set(1.2, 2.0, 2.0);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    fill.position.set(-1.5, 0.5, 1.0);
+    scene.add(fill);
+
+    // -----------------------------
+    // GUI
+    // -----------------------------
+    const gui = new GUI({ title: "Pennello" });
+    gui.domElement.style.position = "fixed";
+    gui.domElement.style.right = "12px";
+    gui.domElement.style.bottom = "12px";
+
+    const brush = {
+      radius: 0.06,      // verrà riscalato dopo bbox
+      strength: 0.55,    // 0..1
+      falloff: 2.0,      // esponente
+      showCursor: true,
+      resetThermal: () => resetThermalField(),
+      resetInflate: () => resetInflate(),
+    };
+    gui.add(brush, "radius", 0.01, 0.20, 0.001);
+    gui.add(brush, "strength", 0.01, 1.0, 0.01);
+    gui.add(brush, "falloff", 1.0, 6.0, 0.1);
+    gui.add(brush, "showCursor");
+    gui.add(brush, "resetThermal");
+    gui.add(brush, "resetInflate");
+
+    // -----------------------------
+    // Modes and state
+    // -----------------------------
+    const Mode = { NATURAL: "natural", POINTS: "points", THERMAL: "thermal", INFLATE: "inflate" };
+    let currentMode = Mode.NATURAL;
+
+    let naturalMesh = null;
+    let pointsObj = null;
+    let thermalMesh = null;
+    let inflateMesh = null;
+
+    // base geometry data
+    let baseGeom = null;
+    let basePos = null;  // original centered positions
+    let baseNor = null;
+    let bbox = null;
+    let size = null;
+
+    // orientation toggles (visual + picking consistent)
+    let extraYaw = 0;      // 0..3 (90° steps)
+    let flipFront = false; // z invert
+    const extraMatrix = new THREE.Matrix4(); // applied to visual objects
+    const invExtraMatrix = new THREE.Matrix4(); // used to transform brush hit -> base space
+
+    // points explode
+    let explodeOn = false, explode = 0, explodeTarget = 0;
+    let explodeAmount = 0.15;
+    let pointsBase = null, pointsNormals = null, pointsJitter = null, pointsCount = 0;
+
+    // thermal field per-vertex (0..1)
+    let thermalT = null; // Float32Array length = vertexCount
+    // inflate field per-vertex (displacement scalar)
+    let inflateD = null; // Float32Array length = vertexCount
+
+    // cursor
+    const cursor = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, depthWrite: false })
+    );
+    cursor.visible = false;
+    scene.add(cursor);
+
+    // picking
+    const raycaster = new THREE.Raycaster();
+    const mouseNdc = new THREE.Vector2();
+    let isPointerDown = false;
+    let lastPointerEvent = null;
+
+    // UI buttons
+    const btnNatural = document.getElementById("btnNatural");
+    const btnPoints  = document.getElementById("btnPoints");
+    const btnThermal = document.getElementById("btnThermal");
+    const btnInflate = document.getElementById("btnInflate");
+
+    btnNatural.addEventListener("click", () => setMode(Mode.NATURAL));
+    btnPoints.addEventListener("click",  () => setMode(Mode.POINTS));
+    btnThermal.addEventListener("click", () => setMode(Mode.THERMAL));
+    btnInflate.addEventListener("click", () => setMode(Mode.INFLATE));
+
+    function setMode(mode) {
+      currentMode = mode;
+
+      // remove all mode objects
+      [naturalMesh, pointsObj, thermalMesh, inflateMesh].forEach(o => { if (o && o.parent) scene.remove(o); });
+
+      // button styles
+      [btnNatural, btnPoints, btnThermal, btnInflate].forEach(b => b.classList.remove("active"));
+
+      // add only active
+      if (mode === Mode.NATURAL) { btnNatural.classList.add("active"); if (naturalMesh) scene.add(naturalMesh); }
+      if (mode === Mode.POINTS)  { btnPoints.classList.add("active");  if (pointsObj) scene.add(pointsObj); }
+      if (mode === Mode.THERMAL) { btnThermal.classList.add("active"); if (thermalMesh) scene.add(thermalMesh); }
+      if (mode === Mode.INFLATE) { btnInflate.classList.add("active"); if (inflateMesh) scene.add(inflateMesh); }
+
+      // cursor visible only in brush modes (if enabled)
+      cursor.visible = brush.showCursor && (mode === Mode.THERMAL || mode === Mode.INFLATE);
+    }
+
+    // -----------------------------
+    // Robust texture load (doesn't block init)
+    // -----------------------------
+    function loadTextureSafe(url) {
+      return new Promise((resolve) => {
+        new THREE.TextureLoader().load(
+          url,
+          (tex) => resolve(tex),
+          undefined,
+          () => resolve(null)
+        );
+      });
+    }
+
+    // -----------------------------
+    // Build Natural Mode (FIX: wrap + encoding + filter)
+    // -----------------------------
+    async function buildNaturalMode() {
+      const geom = baseGeom.clone();
+
+      const hasUV = !!geom.getAttribute("uv");
+      let mat = null;
+
+      if (hasUV) {
+        const tex = await loadTextureSafe(TEX_PATH);
+        if (tex) {
+          // IMPORTANT: photogrammetry UV atlases often need wrapping (not clamp)
+          tex.colorSpace = THREE.SRGBColorSpace;
+
+          // Most UV atlases are in 0..1, but scans can go outside.
+          // Wrapping prevents “grey/black” sampling when UVs are out-of-range.
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+
+          // Mipmaps can blur tiny islands; linear is OK, keep mipmaps but avoid too aggressive.
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+          // OBJ UVs usually match this. If you see the texture upside-down, set true.
+          tex.flipY = false;
+
+          mat = new THREE.MeshStandardMaterial({
+            map: tex,
+            roughness: 0.95,
+            metalness: 0.0
+          });
+        }
+      }
+
+      if (!mat) {
+        mat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.55, metalness: 0.0 });
+        console.warn("Texture non applicata: controlla che la mesh abbia UV e che la texture sia caricabile.");
+      }
+
+      naturalMesh = new THREE.Mesh(geom, mat);
+      naturalMesh.frustumCulled = false;
+
+      applyExtraOrientationAll();
+    }
+
+    // -----------------------------
+    // Build Points Mode
+    // -----------------------------
+    function buildPointsMode() {
+      const meshForSampling = new THREE.Mesh(baseGeom, new THREE.MeshBasicMaterial());
+      const sampler = new MeshSurfaceSampler(meshForSampling).build();
+
+      const pointsN = Math.max(35000, Math.min(170000, Math.floor(estimateAreaFast(baseGeom) * 240000)));
+      pointsCount = pointsN;
+
+      const positions = new Float32Array(pointsN * 3);
+      const normals   = new Float32Array(pointsN * 3);
+      const jitter    = new Float32Array(pointsN * 3);
+
+      const p = new THREE.Vector3(), n = new THREE.Vector3(), j = new THREE.Vector3();
+      for (let i = 0; i < pointsN; i++) {
+        sampler.sample(p, n);
+        positions[i*3+0] = p.x; positions[i*3+1] = p.y; positions[i*3+2] = p.z;
+        normals[i*3+0] = n.x; normals[i*3+1] = n.y; normals[i*3+2] = n.z;
+        j.set(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).normalize();
+        jitter[i*3+0] = j.x; jitter[i*3+1] = j.y; jitter[i*3+2] = j.z;
+      }
+
+      pointsBase = new Float32Array(positions);
+      pointsNormals = normals;
+      pointsJitter = jitter;
+
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: Math.max(size.x, size.y, size.z) * 0.0045,
+        sizeAttenuation: true,
+        map: makeCircleTexture(128),
+        alphaTest: 0.15,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+
+      pointsObj = new THREE.Points(geom, mat);
+      pointsObj.frustumCulled = false;
+
+      applyExtraOrientationAll();
+    }
+
+    // -----------------------------
+    // Thermal Mode (brush-painted per-vertex temperature)
+    // -----------------------------
+    function buildThermalMode() {
+      const geom = baseGeom.clone();
+      const vCount = geom.getAttribute("position").count;
+
+      thermalT = new Float32Array(vCount);
+      // initialize with a mild gradient: forehead/cheeks warm-ish, nose/ears cool-ish (but subtle)
+      initThermalField(geom, thermalT);
+
+      applyThermalToGeometry(geom, thermalT);
+
+      thermalMesh = new THREE.Mesh(
+        geom,
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0 })
+      );
+      thermalMesh.frustumCulled = false;
+
+      applyExtraOrientationAll();
+    }
+
+    function resetThermalField() {
+      if (!thermalMesh || !thermalT) return;
+      initThermalField(thermalMesh.geometry, thermalT);
+      applyThermalToGeometry(thermalMesh.geometry, thermalT);
+    }
+
+    function initThermalField(geom, outT) {
+      const pos = geom.getAttribute("position");
+      geom.computeBoundingBox();
+      const bb = geom.boundingBox;
+      const sz = new THREE.Vector3(); bb.getSize(sz);
+
+      // estimate neck plane (so shoulders stay neutral)
+      const basePositions = geom.getAttribute("position").array;
+      const neck = estimateNeckY(new Float32Array(basePositions), bb, sz);
+
+      // "front" is +Z in our base space; user can flip/rotate visually,
+      // brush works regardless; this init is just aesthetic.
+      const faceZ = bb.min.z + 0.60 * (bb.max.z - bb.min.z);
+      const zFront = bb.max.z;
+
+      const C = {
+        forehead: new THREE.Vector3(0, bb.max.y * 0.55, zFront * 0.40),
+        leftCheek: new THREE.Vector3(-sz.x * 0.22, sz.y * 0.05, zFront * 0.72),
+        rightCheek:new THREE.Vector3( sz.x * 0.22, sz.y * 0.05, zFront * 0.72),
+        noseTip:  new THREE.Vector3(0, sz.y * 0.05, zFront * 0.99),
+        leftEar:  new THREE.Vector3(-sz.x * 0.46, sz.y * 0.08, zFront * 0.08),
+        rightEar: new THREE.Vector3( sz.x * 0.46, sz.y * 0.08, zFront * 0.08),
+        scalp:    new THREE.Vector3(0, bb.max.y * 0.82, zFront * 0.10),
+      };
+
+      const tmp = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        tmp.fromBufferAttribute(pos, i);
+
+        const headOnly = (tmp.y >= neck);
+        const frontBias = smoothstep(faceZ - 0.06*sz.z, faceZ + 0.10*sz.z, tmp.z);
+
+        let t = 0.33;
+        if (headOnly) {
+          const yn = (tmp.y - neck) / (bb.max.y - neck + 1e-6);
+          t += 0.14 * clamp01(yn);
+
+          t += 0.22 * gauss(tmp, C.forehead, sz.y * 0.22);
+          t += 0.18 * gauss(tmp, C.leftCheek, sz.x * 0.18);
+          t += 0.18 * gauss(tmp, C.rightCheek, sz.x * 0.18);
+          t += 0.10 * gauss(tmp, C.scalp, sz.y * 0.25);
+
+          t -= 0.20 * gauss(tmp, C.noseTip, sz.x * 0.11);
+          t -= 0.12 * gauss(tmp, C.leftEar, sz.x * 0.14);
+          t -= 0.12 * gauss(tmp, C.rightEar, sz.x * 0.14);
+
+          t = THREE.MathUtils.lerp(0.30, t, 0.35 + 0.65 * frontBias);
+        } else {
+          t = 0.30;
+        }
+
+        outT[i] = clamp01(t);
+      }
+    }
+
+    function applyThermalToGeometry(geom, tField) {
+      const pos = geom.getAttribute("position");
+      let colorAttr = geom.getAttribute("color");
+      if (!colorAttr) {
+        colorAttr = new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3);
+        geom.setAttribute("color", colorAttr);
+      }
+      const colors = colorAttr.array;
+      for (let i = 0; i < pos.count; i++) {
+        const c = thermalColor(tField[i]);
+        colors[i*3+0] = c.r;
+        colors[i*3+1] = c.g;
+        colors[i*3+2] = c.b;
+      }
+      colorAttr.needsUpdate = true;
+    }
+
+    // -----------------------------
+    // Inflate Mode (brush-painted displacement)
+    // -----------------------------
+    function buildInflateMode() {
+      const geom = baseGeom.clone();
+      const vCount = geom.getAttribute("position").count;
+
+      inflateD = new Float32Array(vCount); // start at 0
+
+      inflateMesh = new THREE.Mesh(
+        geom,
+        new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.65, metalness: 0.0 })
+      );
+      inflateMesh.frustumCulled = false;
+
+      applyExtraOrientationAll();
+    }
+
+    function resetInflate() {
+      if (!inflateMesh || !inflateD) return;
+      inflateD.fill(0);
+      applyInflateFieldToGeometry(inflateMesh.geometry, inflateD);
+    }
+
+    function applyInflateFieldToGeometry(geom, dField) {
+      const posAttr = geom.getAttribute("position");
+      const norAttr = geom.getAttribute("normal");
+
+      for (let i = 0; i < posAttr.count; i++) {
+        const ox = basePos[i*3+0], oy = basePos[i*3+1], oz = basePos[i*3+2];
+        const nx = baseNor[i*3+0], ny = baseNor[i*3+1], nz = baseNor[i*3+2];
+        const d  = dField[i];
+
+        posAttr.array[i*3+0] = ox + nx * d;
+        posAttr.array[i*3+1] = oy + ny * d;
+        posAttr.array[i*3+2] = oz + nz * d;
+      }
+
+      posAttr.needsUpdate = true;
+      geom.computeVertexNormals();
+      norAttr.needsUpdate = true;
+    }
+
+    // -----------------------------
+    // Orientation controls (visual) + inverse for brush math
+    // -----------------------------
+    function applyExtraOrientationAll() {
+      const yaw = extraYaw * (Math.PI / 2);
+      const mYaw = new THREE.Matrix4().makeRotationY(yaw);
+      const mFlip = new THREE.Matrix4().makeScale(1, 1, flipFront ? -1 : 1);
+
+      extraMatrix.copy(mYaw).multiply(mFlip);
+      invExtraMatrix.copy(extraMatrix).invert();
+
+      // Apply to visible objects (mesh/points)
+      [naturalMesh, thermalMesh, inflateMesh, pointsObj].forEach(o => {
+        if (!o) return;
+        o.matrixAutoUpdate = false;
+        o.matrix.identity();
+        o.applyMatrix4(extraMatrix);
+        o.matrixWorldNeedsUpdate = true;
+      });
+
+      // Cursor (kept in world space, updated per-pointer)
+      cursor.visible = brush.showCursor && (currentMode === Mode.THERMAL || currentMode === Mode.INFLATE);
+    }
+
+    // -----------------------------
+    // Brush interaction
+    // -----------------------------
+    function activeBrushTarget() {
+      if (currentMode === Mode.THERMAL) return thermalMesh;
+      if (currentMode === Mode.INFLATE) return inflateMesh;
+      return null;
+    }
+
+    function onPointerMove(e) {
+      lastPointerEvent = e;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouseNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseNdc.y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+
+      const target = activeBrushTarget();
+      if (!target) {
+        cursor.visible = false;
+        return;
+      }
+      cursor.visible = brush.showCursor;
+
+      const hit = raycastOnTarget(target);
+      if (hit) {
+        cursor.position.copy(hit.point);
+        const rWorld = brush.radiusWorld ?? brush.radius;
+        cursor.scale.setScalar(rWorld * 2);
+        if (isPointerDown) {
+          applyBrushAtHit(hit, e);
+        }
+      } else {
+        cursor.visible = false;
+      }
+    }
+
+    function onPointerDown(e) {
+      isPointerDown = true;
+      const target = activeBrushTarget();
+      if (!target) return;
+      const hit = raycastOnTarget(target);
+      if (hit) applyBrushAtHit(hit, e);
+    }
+
+    function onPointerUp() {
+      isPointerDown = false;
+    }
+
+    function raycastOnTarget(target) {
+      raycaster.setFromCamera(mouseNdc, camera);
+      const hits = raycaster.intersectObject(target, true);
+      return hits && hits.length ? hits[0] : null;
+    }
+
+    function applyBrushAtHit(hit, e) {
+      // Transform hit point into BASE SPACE:
+      // The geometry stays in base space; we rotate visuals by extraMatrix.
+      // Raycast gives world-space hit. Convert to object's local, then undo extraMatrix.
+      const localPoint = hit.object.worldToLocal(hit.point.clone()); // in object local (after extraMatrix applied)
+      const basePoint = localPoint.applyMatrix4(invExtraMatrix);     // back to base/original space
+
+      // scale brush radius relative to model size (world units == model units here)
+      const r = brush.radiusWorld ?? brush.radius;
+      const strength = brush.strength;
+      const falloffP = brush.falloff;
+
+      if (currentMode === Mode.THERMAL && thermalMesh && thermalT) {
+        // click = heat, shift+click = cool
+        const dir = e.shiftKey ? -1 : 1;
+        paintScalarField(thermalMesh.geometry, thermalT, basePoint, r, dir * strength, falloffP, 0, 1);
+        applyThermalToGeometry(thermalMesh.geometry, thermalT);
+      }
+
+      if (currentMode === Mode.INFLATE && inflateMesh && inflateD) {
+        // click = inflate, alt+click = deflate
+        const dir = e.altKey ? -1 : 1;
+        // displacement scale: based on model size so it feels natural
+        const dispScale = (Math.max(size.x, size.y, size.z) * 0.06);
+        paintScalarField(inflateMesh.geometry, inflateD, basePoint, r, dir * strength * dispScale, falloffP, -dispScale*2, dispScale*2);
+        applyInflateFieldToGeometry(inflateMesh.geometry, inflateD);
+      }
+    }
+
+    function paintScalarField(geom, field, center, radius, delta, falloffPow, minVal, maxVal) {
+      const pos = geom.getAttribute("position");
+      const r2 = radius * radius;
+
+      const tmp = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        // use base positions for stable paint even after deformation
+        tmp.set(basePos[i*3+0], basePos[i*3+1], basePos[i*3+2]);
+
+        const d2 = tmp.distanceToSquared(center);
+        if (d2 > r2) continue;
+
+        const d = Math.sqrt(d2);
+        const t = 1 - (d / (radius + 1e-9));      // 1 at center, 0 at edge
+        const w = Math.pow(clamp01(t), falloffPow);
+        field[i] = clamp(field[i] + delta * w, minVal, maxVal);
+      }
+    }
+
+    // -----------------------------
+    // Points explode update
+    // -----------------------------
+    function updatePointsExplosion(dt) {
+      if (!pointsObj) return;
+      const speed = 6.5;
+      explode += (explodeTarget - explode) * (1 - Math.exp(-speed * dt));
+
+      const posAttr = pointsObj.geometry.getAttribute("position");
+      const arr = posAttr.array;
+
+      const a = explode * explodeAmount;
+      const j = explode * explodeAmount * 0.65;
+
+      for (let i = 0; i < pointsCount; i++) {
+        const bx = pointsBase[i*3+0], by = pointsBase[i*3+1], bz = pointsBase[i*3+2];
+        const nx = pointsNormals[i*3+0], ny = pointsNormals[i*3+1], nz = pointsNormals[i*3+2];
+        const jx = pointsJitter[i*3+0],  jy = pointsJitter[i*3+1],  jz = pointsJitter[i*3+2];
+
+        arr[i*3+0] = bx + nx * a + jx * j;
+        arr[i*3+1] = by + ny * a + jy * j;
+        arr[i*3+2] = bz + nz * a + jz * j;
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    function clamp(x, a, b) { return Math.min(b, Math.max(a, x)); }
+    function clamp01(x){ return clamp(x, 0, 1); }
+    function smoothstep(a,b,x){
+      const t = clamp01((x-a)/(b-a + 1e-9));
+      return t*t*(3-2*t);
+    }
+    function gauss(p,c,r){
+      const d2 = p.distanceToSquared(c);
+      const s2 = r*r + 1e-9;
+      return Math.exp(-d2/(2*s2));
+    }
+    function thermalColor(t) {
+      const stops = [
+        { t: 0.00, c: new THREE.Color(0x0b1fff) },
+        { t: 0.25, c: new THREE.Color(0x00d5ff) },
+        { t: 0.50, c: new THREE.Color(0x00ff6a) },
+        { t: 0.75, c: new THREE.Color(0xfff000) },
+        { t: 1.00, c: new THREE.Color(0xff2a00) }
+      ];
+      for (let i=0;i<stops.length-1;i++){
+        const A=stops[i], B=stops[i+1];
+        if (t>=A.t && t<=B.t){
+          const k=(t-A.t)/(B.t-A.t + 1e-9);
+          return A.c.clone().lerp(B.c,k);
+        }
+      }
+      return stops[stops.length-1].c.clone();
+    }
+
+    function makeCircleTexture(res=128) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = res;
+      const ctx = canvas.getContext("2d");
+      const g = ctx.createRadialGradient(res/2,res/2, 0, res/2,res/2, res/2);
+      g.addColorStop(0.0, "rgba(255,255,255,1)");
+      g.addColorStop(0.5, "rgba(255,255,255,0.65)");
+      g.addColorStop(1.0, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,res,res);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    function estimateAreaFast(geom) {
+      const pos = geom.getAttribute("position").array;
+      const idx = geom.index ? geom.index.array : null;
+
+      let area = 0;
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      const ab = new THREE.Vector3(), ac = new THREE.Vector3(), cross = new THREE.Vector3();
+
+      if (idx) {
+        for (let i=0; i<idx.length; i+=3) {
+          const ia = idx[i]*3, ib = idx[i+1]*3, ic = idx[i+2]*3;
+          a.set(pos[ia], pos[ia+1], pos[ia+2]);
+          b.set(pos[ib], pos[ib+1], pos[ib+2]);
+          c.set(pos[ic], pos[ic+1], pos[ic+2]);
+          ab.subVectors(b,a);
+          ac.subVectors(c,a);
+          cross.crossVectors(ab,ac);
+          area += 0.5 * cross.length();
+        }
+      } else {
+        for (let i=0; i<pos.length; i+=9) {
+          a.set(pos[i], pos[i+1], pos[i+2]);
+          b.set(pos[i+3], pos[i+4], pos[i+5]);
+          c.set(pos[i+6], pos[i+7], pos[i+8]);
+          ab.subVectors(b,a);
+          ac.subVectors(c,a);
+          cross.crossVectors(ab,ac);
+          area += 0.5 * cross.length();
+        }
+      }
+      return Math.min(area, 50);
+    }
+
+    function estimateNeckY(posArray, bbox, size) {
+      const yMin = bbox.min.y, yMax = bbox.max.y;
+      const bins = 48;
+      const counts = new Array(bins).fill(0);
+      const sumR2  = new Array(bins).fill(0);
+
+      for (let i=0; i<posArray.length; i+=3) {
+        const x = posArray[i], y = posArray[i+1], z = posArray[i+2];
+        const t = (y - yMin) / (yMax - yMin + 1e-9);
+        const b = Math.max(0, Math.min(bins-1, Math.floor(t*bins)));
+        const r2 = x*x + z*z;
+        counts[b] += 1;
+        sumR2[b] += r2;
+      }
+
+      const start = Math.floor(bins * 0.10);
+      const end   = Math.floor(bins * 0.55);
+
+      let bestBin = start;
+      let bestVal = Infinity;
+
+      for (let b=start; b<=end; b++) {
+        if (counts[b] < 200) continue;
+        const meanR2 = sumR2[b] / counts[b];
+        if (meanR2 < bestVal) { bestVal = meanR2; bestBin = b; }
+      }
+
+      const yNeck = yMin + (bestBin + 0.5) * (yMax - yMin) / bins;
+      return yNeck + 0.03 * size.y;
+    }
+
+    function frameCameraToObject(obj) {
+      if (!obj) return;
+      const box = new THREE.Box3().setFromObject(obj);
+      const sphere = new THREE.Sphere();
+      box.getBoundingSphere(sphere);
+
+      const r = sphere.radius || 1;
+      const fov = camera.fov * Math.PI / 180;
+      const dist = (r / Math.sin(fov/2)) * 1.15;
+
+      camera.near = Math.max(0.001, dist / 100);
+      camera.far  = dist * 100;
+      camera.updateProjectionMatrix();
+
+      camera.position.set(sphere.center.x, sphere.center.y + r*0.12, sphere.center.z + dist);
+      controls.target.copy(sphere.center);
+      controls.update();
+    }
+
+    // -----------------------------
+    // Keyboard
+    // -----------------------------
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Digit1") setMode(Mode.NATURAL);
+      if (e.code === "Digit2") setMode(Mode.POINTS);
+      if (e.code === "Digit3") setMode(Mode.THERMAL);
+      if (e.code === "Digit4") setMode(Mode.INFLATE);
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        explodeOn = !explodeOn;
+        explodeTarget = explodeOn ? 1 : 0;
+      }
+      if (e.code === "KeyF") {
+        flipFront = !flipFront;
+        applyExtraOrientationAll();
+      }
+      if (e.code === "KeyR") {
+        extraYaw = (extraYaw + 1) % 4;
+        applyExtraOrientationAll();
+      }
+    });
+
+    // Pointer events
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+
+    // -----------------------------
+    // Load OBJ and build everything
+    // -----------------------------
+    const objLoader = new OBJLoader();
+    objLoader.load(
+      OBJ_PATH,
+      async (obj) => {
+        try {
+          let firstMesh = null;
+          obj.traverse((c) => { if (c.isMesh && !firstMesh) firstMesh = c; });
+          if (!firstMesh) { showError("OBJ caricato ma non contiene una mesh."); return; }
+
+          baseGeom = firstMesh.geometry.clone();
+          if (!baseGeom.isBufferGeometry) baseGeom = new THREE.BufferGeometry().fromGeometry(baseGeom);
+
+          // center geometry
+          baseGeom.computeBoundingBox();
+          const c = new THREE.Vector3();
+          baseGeom.boundingBox.getCenter(c);
+          baseGeom.translate(-c.x, -c.y, -c.z);
+
+          baseGeom.computeVertexNormals();
+          baseGeom.computeBoundingBox();
+          bbox = baseGeom.boundingBox.clone();
+          size = new THREE.Vector3(); bbox.getSize(size);
+
+          basePos = new Float32Array(baseGeom.getAttribute("position").array);
+          baseNor = new Float32Array(baseGeom.getAttribute("normal").array);
+
+          // sensible scaling for brush radius
+          const modelScale = Math.max(size.x, size.y, size.z);
+          brush.radius = modelScale * 0.06;
+          brush.radiusWorld = brush.radius; // used in cursor
+
+          explodeAmount = modelScale * 0.22;
+
+          // build modes
+          await buildNaturalMode();
+          buildPointsMode();
+          buildThermalMode();
+          buildInflateMode();
+
+          setMode(Mode.NATURAL);
+          frameCameraToObject(naturalMesh);
+
+          hideOverlay();
+        } catch (err) {
+          console.error(err);
+          showError("Errore durante la costruzione delle modalità. Guarda la console.");
+        }
+      },
+      undefined,
+      (err) => {
+        console.error(err);
+        showError("Non riesco a caricare head.obj. Sei in Live Server? Il file si chiama esattamente head.obj?");
+      }
+    );
+
+    // -----------------------------
+    // Resize + loop
+    // -----------------------------
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    let lastT = performance.now();
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min(0.033, (now - lastT) / 1000);
+      lastT = now;
+
+      controls.update();
+      updatePointsExplosion(dt);
+
+      // keep cursor visibility in sync
+      cursor.visible = brush.showCursor && (currentMode === Mode.THERMAL || currentMode === Mode.INFLATE);
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
